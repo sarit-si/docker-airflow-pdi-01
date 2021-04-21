@@ -1,0 +1,151 @@
+version: '3'
+x-pdi-common:
+  &pdi-common
+  build:
+    context: ./setup-pentaho
+    dockerfile: Dockerfile
+    args:
+      PENTAHO_UID: ${PENTAHO_UID}
+      PENTAHO_GID: ${PENTAHO_GID}
+  image: pdi
+  environment:
+    &pdi-common-env
+    PENTAHO_DI_JAVA_OPTIONS: ${PENTAHO_DI_JAVA_OPTIONS}
+    CARTE_USER: ${CARTE_USER}
+    CARTE_PASSWORD: ${CARTE_PASSWORD}
+  volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    - ./source-code/ktrs:/home/pentaho/repositories
+    - ./setup-pentaho/logs:/opt/data-integration/logs
+    - ./setup-pentaho/repositories.xml:/opt/data-integration/.kettle/repositories.xml
+    - ./setup-pentaho/kettle-properties/${HOST_ENV:-localhost}-kettle.properties:/opt/data-integration/.kettle/kettle.properties
+    - ./setup-pentaho/simple-jndi:/opt/data-integration/simple-jndi
+  deploy:
+    restart_policy:
+      condition: on-failure
+      max_attempts: 3
+
+x-airflow-common:
+  &airflow-common
+  build: ./setup-airflow
+  image: airflow
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-database/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@airflow-database/airflow
+    AIRFLOW__CELERY__BROKER_URL: redis://:@airflow-broker:6379/0
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    PDI_CONN_STR: http://${CARTE_USER:-cluster}:${CARTE_PASSWORD:-cluster}@pdi-master:${CARTE_HOST_PORT:-8181}
+  volumes:
+    - ./source-code/dags:/opt/airflow/dags
+    - ./setup-airflow/plugins:/opt/airflow/plugins
+    - ./setup-airflow/logs:/opt/airflow/logs
+    - ./setup-airflow/execute-carte.sh:/opt/airflow/execute-carte.sh
+    - ./setup-airflow/airflow.cfg:/opt/airflow/airflow.cfg
+  user: "${AIRFLOW_UID}:${AIRFLOW_GID}"
+  depends_on:
+    airflow-broker:
+      condition: service_healthy
+    airflow-database:
+      condition: service_healthy
+
+
+services:
+# Airflow-DB
+  airflow-database:
+    image: postgres:13
+    container_name: airflow-database
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+    restart: always
+
+# Airflow-messenger
+  airflow-broker:
+    image: redis:latest
+    container_name: airflow-broker
+    ports:
+      - 6379:6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 30s
+      retries: 50
+    restart: always
+
+# Airflow-webserver
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: airflow-webserver
+    command: webserver
+    ports:
+      - ${AIRFLOW_HOST_PORT:-8080}:8080
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:${AIRFLOW_HOST_PORT:-8080}/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: always
+
+# Airflow-scheduler
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: airflow-scheduler
+    command: scheduler
+    restart: always
+
+# Airflow-worker
+  airflow-worker:
+    <<: *airflow-common
+    command: celery worker
+    restart: always
+
+# Airflow-DB-initialize
+  airflow-init:
+    <<: *airflow-common
+    container_name: airflow-init
+    command: version
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_UPGRADE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-airflow}
+      _AIRFLOW_WWW_USER_EMAIL: ${AIRFLOW_ADMIN_EMAIL:-admin@admin.com}
+
+# Pentaho
+  pdi-master:
+    << : *pdi-common
+    container_name: pdi-master
+    environment:
+      <<: *pdi-common-env
+    ports:
+      - ${CARTE_HOST_PORT:-8181}:8181
+
+  # pdi-child:
+  #   << : *pdi-common
+  #   container_name: pdi-child
+  #   ports:
+  #     - 8182
+  #   depends_on:
+  #     - pdi-master
+  #   environment:
+  #     <<: *pdi-common-env
+  #     CARTE_PORT: 8182
+  #     CARTE_IS_MASTER: 'N'
+  #     CARTE_INCLUDE_MASTERS: 'Y'
+  #     CARTE_MASTER_HOSTNAME: 'pdi-master'
+  #     CARTE_MASTER_PORT: ${CARTE_HOST_PORT:-8181}
+
+volumes:
+  postgres-db-volume:
