@@ -1,5 +1,5 @@
 #!/bin/bash
-
+# based on https://github.com/aloysius-lim/docker-pentaho-di/blob/master/docker/Dockerfile
 set -e
 
 if [ "$1" = 'carte.sh' ]; then
