@@ -16,7 +16,7 @@ args = {
 
 
 with DAG(
-    dag_id="hello-world",
+    dag_id="load-testing",
     default_args=args,
     schedule_interval=None,
     catchup=False,
