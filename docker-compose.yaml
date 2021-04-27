@@ -10,7 +10,7 @@ x-pdi-common:
   image: pdi
   environment:
     &pdi-common-env
-    HOST_ENV: ${HOST_ENV}
+    HOST_ENV: ${HOST_ENV:-localhost}
     PENTAHO_DI_JAVA_OPTIONS: ${PENTAHO_DI_JAVA_OPTIONS}
     CARTE_USER: ${CARTE_USER}
     CARTE_PASSWORD: ${CARTE_PASSWORD}
