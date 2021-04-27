@@ -28,11 +28,21 @@ with DAG(
     )
 
     t1 = BashOperator(
-        task_id='Trigger_Job',
+        task_id='Trigger_Job1',
         bash_command='curl "${PDI_CONN_STR}/kettle/executeJob/?rep=test-repo&job=/helloworld/helloworld-job"'
     )
 
     t2 = BashOperator(
+        task_id='Trigger_Job2',
+        bash_command='curl "${PDI_CONN_STR}/kettle/executeJob/?rep=test-repo&job=/helloworld/helloworld-job"'
+    )
+
+    t3 = BashOperator(
+        task_id='Trigger_Job3',
+        bash_command='curl "${PDI_CONN_STR}/kettle/executeJob/?rep=test-repo&job=/helloworld/helloworld-job"'
+    )
+
+    t4 = BashOperator(
         task_id='Trigger_Transformation',
         bash_command='curl "${PDI_CONN_STR}/kettle/executeTrans/?rep=test-repo&trans=/helloworld/helloworld-trans"'
     )
@@ -41,4 +51,4 @@ with DAG(
         task_id='Stop',
     )
 
-    start >> [t1, t2] >> stop
+    start >> [t1, t2, t3, t4] >> stop
