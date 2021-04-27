@@ -10,11 +10,12 @@ x-pdi-common:
   image: pdi
   environment:
     &pdi-common-env
+    HOST_ENV: ${HOST_ENV}
     PENTAHO_DI_JAVA_OPTIONS: ${PENTAHO_DI_JAVA_OPTIONS}
     CARTE_USER: ${CARTE_USER}
     CARTE_PASSWORD: ${CARTE_PASSWORD}
   volumes:
-    - /var/run/docker.sock:/var/run/docker.sock
+    # - /var/run/docker.sock:/var/run/docker.sock
     - ./source-code/ktrs:/home/pentaho/repositories
     - ./setup-pentaho/logs:/opt/data-integration/logs
     - ./setup-pentaho/repositories.xml:/opt/data-integration/.kettle/repositories.xml
@@ -31,6 +32,9 @@ x-airflow-common:
   image: airflow
   environment:
     &airflow-common-env
+    HOST_ENV: ${HOST_ENV}
+    AIRFLOW_UID: ${AIRFLOW_UID}
+    AIRFLOW_GID: ${AIRFLOW_GID}
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-database/airflow
     AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@airflow-database/airflow
@@ -45,7 +49,6 @@ x-airflow-common:
     - ./setup-airflow/logs:/opt/airflow/logs
     - ./setup-airflow/execute-carte.sh:/opt/airflow/execute-carte.sh
     - ./setup-airflow/airflow.cfg:/opt/airflow/airflow.cfg
-  user: "${AIRFLOW_UID}:${AIRFLOW_GID}"
   depends_on:
     airflow-broker:
       condition: service_healthy
