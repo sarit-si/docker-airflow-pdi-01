@@ -71,13 +71,65 @@ To run as daemon, add -d option.
 - If not below default ports, replace with the ones used during CARTE_HOST_PORT & AIRFLOW_HOST_PORT setup.
 
 Airflow Webserver
- 
+
         localhost:8080/home
 
 Carte Webserver
 
         localhost:8181/kettle/status
 
+# How to trigger tasks from a DAG
+
+As per [Carte REST API documentaion](https://help.pentaho.com/Documentation/9.1/Developer_center/REST_API_Reference/Carte), executeJob and executeTrans APIs can be used to trigger tasks remotely.
+
+## Method 1:
+Job trigger:
+
+        job = BashOperator(
+        task_id='Trigger_Job',
+        bash_command='curl "${PDI_CONN_STR}/kettle/executeJob/?rep=test-repo&job=/helloworld/helloworld-job"'
+    )
+
+Transformation trigger:
+
+        trans = BashOperator(
+        task_id='Trigger_Transformation',
+        bash_command='curl "${PDI_CONN_STR}/kettle/executeTrans/?rep=test-repo&trans=/helloworld/helloworld-trans"'
+    )
+
+- Parameters can be added to curl command by adding &, ex: &param1=value1&param2=value2
+
+- PDI_CONN_STR: this is an environment variable in compose file, set to the PDI docker container URL. Used by Airflow DAG to send tasks to Carte.
+
+        http://${CARTE_USER:-cluster}:${CARTE_PASSWORD:-cluster}@pdi-master:${CARTE_HOST_PORT:-8181}
+
+
+## Method 2
+In DAG file, import the user defined helper functions defined in utils/execute_pdi.py
+
+Job trigger:
+
+        job = BashOperator(
+        task_id='Trigger_Job',
+        bash_command=execute_job(
+            rep="test-repo",
+            task="helloworld-job",
+            dir="/helloworld/",
+            param=""
+        )
+    )
+
+Transformation trigger:
+
+        trans = BashOperator(
+                task_id='Trigger_Transformation',
+                bash_command=execute_trans(
+                rep="test-repo",
+                task="helloworld-trans",
+                dir="/helloworld/",
+                param=""
+                )
+        )
 # Best practices
 - ```jdbc.properties``` file, which contains database access credentials, has been included in this repo for reference purpose only. In actual development, this should be avoided and needs to be added to gitignore instead. After first code pull to a server, update it with all JNDI details before docker compose.
 
@@ -85,7 +137,7 @@ Carte Webserver
 
 - ```HOST_ENV``` setting this parameter gives us a flexibility to choose appropriate ```kettle.properties``` file. For example, QA and PROD mailing server SMTP details may differ. This can be included in separate kettle properties file, to be selected dynamically based on the host environment. Not only this, if one uses the ```jdbc.properties``` file, we can enable PDI container dynamically select the correct JNDI from ```jdbc.properties``` file. For ex: if one needs to test a transformation in QA environemnt using Postgres JNDI connection encoded as ```db-${HOST_ENV}```, running PDI service with ```HOST_ENV=qa```, will render ```db-qa``` database JNDI, thus using QA data for testing.
 
-- ```PENTAHO_DI_JAVA_OPTIONS``` Having this option lets the user tweak the amount of memory PDI gets inside the container, to run a task. Depending on the host machine memory and average task complexity, this can be modified to avoid PDI container crash due to "GC Out of Memory" errors. If host machine has ample RAM and PDI container is crashing due to the default memory limits, we can increase it by setting ```PENTAHO_DI_JAVA_OPTIONS=-Xms1g -Xmx4g``` 1GB and 4GB being the lower and upper limits respectively.
+- ```PENTAHO_DI_JAVA_OPTIONS``` Having this option lets the user tweak the amount of memory PDI gets inside the container, to run a task. Depending on the host machine memory and average task complexity, this can be modified to avoid PDI container crash due to "GC Out of Memory" errors. If host machine has ample RAM and PDI container is crashing due to the default memory limits, we can increase it by setting ```PENTAHO_DI_JAVA_OPTIONS=-Xms2g -Xmx4g``` 2GB and 4GB being the lower and upper limits respectively.
 
 # References & Credits
 - [What is Carte Server ?](https://wiki.pentaho.com/display/EAI/Carte+User+Documentation)
@@ -96,4 +148,6 @@ Carte Webserver
 
 - [Carte APIs to trigger kettle transformation/jobs](https://help.pentaho.com/Documentation/9.1/Developer_center/REST_API_Reference/Carte)
 
-- [Scheduling a PDI job using Dockerized Airflow](https://diethardsteiner.github.io/pdi/2020/04/01/Scheduling-a-PDI-Job-on-Apache-Airflow.html)
+- [Monitoring Carte logs from Airlfow container](https://diethardsteiner.github.io/pdi/2020/04/01/Scheduling-a-PDI-Job-on-Apache-Airflow.html)
+
+- [Docker entrypoint logic](https://github.com/aloysius-lim/docker-pentaho-di/blob/master/docker/Dockerfile)
