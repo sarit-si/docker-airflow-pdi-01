@@ -20,7 +20,7 @@ with DAG(
     default_args=args,
     schedule_interval=None,
     catchup=False,
-    description=f"Run multiple tasks in parallel for load testing",
+    description=f"Hello world!!!",
 ) as dag:
 
     start = DummyOperator(
